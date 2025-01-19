@@ -1,42 +1,64 @@
 {
-    "employees": {
-        "uidExample": {
-            "createAt": "timestampExample",
-            "name": "exampleName",
-            "status": "exampleStatus"
-        }
-    },
-    "attendance": {
-        "uidExample": {
-            "exampleTimestamp": {
-                "checkIn": {
-                    "time": "exampleTime",
-                    "photoUrl": "examplePhotoUrl",
-                    "isValid": "exampleBoolean",
-                    "type": "exampleType",
-                    "name": "exampleName"
-                },
-                "checkOut": {
-                    "time": "exampleTime",
-                    "photoUrl": "examplePhotoUrl",
-                    "isValid": "exampleBoolean",
-                    "type": "exampleType",
-                    "name": "exampleName"
-                }
-            }
-        }
-    },
-    "workingHours": {
+  "attendance": {
+    "B37C20AD": {
+      "2025-01-19": {
         "checkIn": {
-            "start": "exampleStartTime",
-            "end": "exampleEndTime"
+          "isValid": true,
+          "name": "Evee",
+          "photoUrl": "https://example.com/photo.jpg",
+          "time": "14:51",
+          "type": "late"
         },
         "checkOut": {
-            "start": "exampleStartTime",
-            "end": "exampleEndTime"
+          "isValid": true,
+          "name": "Evee",
+          "photoUrl": "https://example.com/photo.jpg",
+          "time": "14:51",
+          "type": "null"
         }
+      }
     },
-    "unregisteredUids": {
-        "exampleUid": "exampleValue"
+    "uid1": {
+      "1705555200000": {
+        "checkIn": {
+          "isValid": true,
+          "name": "John Doe",
+          "photoUrl": "https://example.com/photo1.jpg",
+          "time": "08:00"
+        },
+        "checkOut": {
+          "isValid": true,
+          "name": "John Doe",
+          "photoUrl": "https://example.com/photo2.jpg",
+          "time": "14:30"
+        }
+      }
     }
+  },
+  "employees": {
+    "B37C20AD": {
+      "createAt": "timestamp",
+      "name": "Evee",
+      "status": "Active"
+    },
+    "uid1": {
+      "createAt": "timestamp",
+      "name": "John Doe",
+      "status": "Active"
+    }
+  },
+  "unregisteredUids": {
+    "73AF4AA4": "73AF4AA4",
+    "B37C20AD": "B37C20AD"
+  },
+  "workingHours": {
+    "checkIn": {
+      "end": "09:30",
+      "start": "08:00"
+    },
+    "checkOut": {
+      "end": "15:00",
+      "start": "14:00"
+    }
+  }
 }
