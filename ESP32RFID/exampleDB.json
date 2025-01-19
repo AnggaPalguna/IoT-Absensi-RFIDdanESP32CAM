@@ -1,0 +1,42 @@
+{
+    "employees": {
+        "uidExample": {
+            "createAt": "timestampExample",
+            "name": "exampleName",
+            "status": "exampleStatus"
+        }
+    },
+    "attendance": {
+        "uidExample": {
+            "exampleTimestamp": {
+                "checkIn": {
+                    "time": "exampleTime",
+                    "photoUrl": "examplePhotoUrl",
+                    "isValid": "exampleBoolean",
+                    "type": "exampleType",
+                    "name": "exampleName"
+                },
+                "checkOut": {
+                    "time": "exampleTime",
+                    "photoUrl": "examplePhotoUrl",
+                    "isValid": "exampleBoolean",
+                    "type": "exampleType",
+                    "name": "exampleName"
+                }
+            }
+        }
+    },
+    "workingHours": {
+        "checkIn": {
+            "start": "exampleStartTime",
+            "end": "exampleEndTime"
+        },
+        "checkOut": {
+            "start": "exampleStartTime",
+            "end": "exampleEndTime"
+        }
+    },
+    "unregisteredUids": {
+        "exampleUid": "exampleValue"
+    }
+}

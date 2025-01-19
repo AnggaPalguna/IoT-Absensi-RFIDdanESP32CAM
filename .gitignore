@@ -1,3 +1,6 @@
+#header
+*.h
+
 # Prerequisites
 *.d
 
