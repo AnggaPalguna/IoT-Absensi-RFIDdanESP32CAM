@@ -29,6 +29,11 @@ struct WorkingHours {
   int checkOutStart_minute = 0;
   int checkOutEnd_hour = 15;
   int checkOutEnd_minute = 0;
+  int toleranceBeforeCheckIn = 0;    // dalam menit
+  int toleranceAfterCheckIn = 120;   // dalam menit
+  int toleranceBeforeCheckOut = 120; // dalam menit
+  int toleranceAfterCheckOut = 120;  // dalam menit
+  int minWorkingTime = 120;          // minimal waktu kerja dalam menit
 };
 
 WorkingHours workingHours;
@@ -44,6 +49,7 @@ String getCurrentDate() {
   return String(dateString);
 }
 
+// Fungsi untuk mendapatkan waktu format HH:MM
 String getCurrentTime() {
   struct tm timeinfo;
   char timeString[6];
@@ -54,6 +60,12 @@ String getCurrentTime() {
   return String(timeString);
 }
 
+// Fungsi untuk mendapatkan selisih waktu dalam menit
+int getTimeDifferenceInMinutes(int hour1, int minute1, int hour2, int minute2) {
+  return abs((hour1 * 60 + minute1) - (hour2 * 60 + minute2));
+}
+
+// Fungsi untuk mengecek apakah UID terdaftar dan aktif
 bool isValidUID(const String &uid) {
   char path[100];
   sprintf(path, FIREBASE_PATH_EMPLOYEE_STATUS, uid.c_str());
@@ -67,6 +79,7 @@ bool isValidUID(const String &uid) {
   return false;
 }
 
+// Fungsi untuk mendapatkan nama karyawan
 String getEmployeeName(const String &uid) {
   char path[100];
   sprintf(path, FIREBASE_PATH_EMPLOYEE_NAME, uid.c_str());
@@ -77,41 +90,6 @@ String getEmployeeName(const String &uid) {
     }
   }
   return "Unknown";
-}
-
-bool isValidCheckInTime(int hour, int minute) {
-  int totalMinutes = hour * 60 + minute;
-  int startMinutes = workingHours.checkInStart_hour * 60 + workingHours.checkInStart_minute;
-  int endMinutes = workingHours.checkInEnd_hour * 60 + workingHours.checkInEnd_minute;
-  return totalMinutes >= startMinutes && totalMinutes <= endMinutes;
-}
-
-bool isValidCheckOutTime(int hour, int minute) {
-  int totalMinutes = hour * 60 + minute;
-  int startMinutes = workingHours.checkOutStart_hour * 60 + workingHours.checkOutStart_minute;
-  int endMinutes = workingHours.checkOutEnd_hour * 60 + workingHours.checkOutEnd_minute;
-  return totalMinutes >= startMinutes && totalMinutes <= endMinutes;
-}
-
-String determineCheckInType(int hour, int minute) {
-  if (!isValidCheckInTime(hour, minute)) {
-    if (hour > workingHours.checkInEnd_hour ||
-        (hour == workingHours.checkInEnd_hour && minute > workingHours.checkInEnd_minute)) {
-      return "late";
-    }
-    return "invalid_time";
-  }
-  return "null";
-}
-
-String determineCheckOutType(int hour, int minute) {
-  if (!isValidCheckOutTime(hour, minute)) {
-    if (hour < workingHours.checkOutStart_hour) {
-      return "early";
-    }
-    return "invalid_time";
-  }
-  return "null";
 }
 
 void loadWorkingHours() {
@@ -131,6 +109,86 @@ void loadWorkingHours() {
     String checkOutEnd = fbdo.stringData();
     sscanf(checkOutEnd.c_str(), "%d:%d", &workingHours.checkOutEnd_hour, &workingHours.checkOutEnd_minute);
   }
+  
+  // Load tolerances
+  if (Firebase.RTDB.getInt(&fbdo, FIREBASE_PATH_WORKING_HOURS + String("/tolerances/beforeCheckIn"))) {
+    workingHours.toleranceBeforeCheckIn = fbdo.intData();
+  }
+  if (Firebase.RTDB.getInt(&fbdo, FIREBASE_PATH_WORKING_HOURS + String("/tolerances/afterCheckIn"))) {
+    workingHours.toleranceAfterCheckIn = fbdo.intData();
+  }
+  if (Firebase.RTDB.getInt(&fbdo, FIREBASE_PATH_WORKING_HOURS + String("/tolerances/beforeCheckOut"))) {
+    workingHours.toleranceBeforeCheckOut = fbdo.intData();
+  }
+  if (Firebase.RTDB.getInt(&fbdo, FIREBASE_PATH_WORKING_HOURS + String("/tolerances/afterCheckOut"))) {
+    workingHours.toleranceAfterCheckOut = fbdo.intData();
+  }
+  if (Firebase.RTDB.getInt(&fbdo, FIREBASE_PATH_WORKING_HOURS + String("/minWorkingTime"))) {
+    workingHours.minWorkingTime = fbdo.intData();
+  }
+}
+
+bool canCheckOut(const String &checkInTime, int currentHour, int currentMinute) {
+  int checkInHour, checkInMinute;
+  sscanf(checkInTime.c_str(), "%d:%d", &checkInHour, &checkInMinute);
+  
+  int timeDiff = getTimeDifferenceInMinutes(checkInHour, checkInMinute, currentHour, currentMinute);
+  
+  // Cek minimal waktu kerja
+  if (timeDiff < workingHours.minWorkingTime) {
+    return false;
+  }
+  
+  // Cek apakah sudah masuk waktu check-out yang valid
+  int currentMinutes = currentHour * 60 + currentMinute;
+  int startCheckOutMinutes = workingHours.checkOutStart_hour * 60 + workingHours.checkOutStart_minute;
+  int earlyCheckOutMinutes = startCheckOutMinutes - workingHours.toleranceBeforeCheckOut;
+  
+  return currentMinutes >= earlyCheckOutMinutes;
+}
+
+String determineCheckInType(int hour, int minute) {
+  int currentMinutes = hour * 60 + minute;
+  int startMinutes = workingHours.checkInStart_hour * 60 + workingHours.checkInStart_minute;
+  int endMinutes = workingHours.checkInEnd_hour * 60 + workingHours.checkInEnd_minute;
+  
+  // Cek waktu check-in dalam rentang yang diizinkan
+  if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
+    return "null";
+  }
+  
+  // Cek keterlambatan dalam batas toleransi
+  int lateLimit = endMinutes + workingHours.toleranceAfterCheckIn;
+  if (currentMinutes > endMinutes && currentMinutes <= lateLimit) {
+    return "late";
+  }
+  
+  return "invalid_time";
+}
+
+String determineCheckOutType(int hour, int minute) {
+  int currentMinutes = hour * 60 + minute;
+  int startMinutes = workingHours.checkOutStart_hour * 60 + workingHours.checkOutStart_minute;
+  int endMinutes = workingHours.checkOutEnd_hour * 60 + workingHours.checkOutEnd_minute;
+  
+  // Cek waktu check-out dalam rentang yang diizinkan
+  if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
+    return "null";
+  }
+  
+  // Cek pulang awal dalam batas toleransi
+  int earlyLimit = startMinutes - workingHours.toleranceBeforeCheckOut;
+  if (currentMinutes >= earlyLimit && currentMinutes < startMinutes) {
+    return "early";
+  }
+  
+  // Cek keterlambatan dalam batas toleransi
+  int lateLimit = endMinutes + workingHours.toleranceAfterCheckOut;
+  if (currentMinutes > endMinutes && currentMinutes <= lateLimit) {
+    return "late";
+  }
+  
+  return "invalid_time";
 }
 
 void setup() {
@@ -138,6 +196,7 @@ void setup() {
   SPI.begin();
   mfrc522.PCD_Init();
 
+  // Koneksi WiFi
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Menghubungkan WiFi");
   while (WiFi.status() != WL_CONNECTED) {
@@ -147,8 +206,10 @@ void setup() {
   Serial.println("\nTerhubung ke WiFi");
   Serial.println("IP: " + WiFi.localIP().toString());
 
+  // Konfigurasi waktu
   configTime(7 * 3600, 0, "pool.ntp.org"); // GMT+7
 
+  // Konfigurasi Firebase
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
   auth.user.email = USER_EMAIL;
@@ -158,6 +219,7 @@ void setup() {
   Firebase.reconnectWiFi(true);
   config.token_status_callback = tokenStatusCallback;
 
+  // Load working hours from Firebase
   loadWorkingHours();
 }
 
@@ -185,28 +247,31 @@ void loop() {
       String name = getEmployeeName(uid);
       String attendancePath = String(FIREBASE_PATH_ATTENDANCE) + "/" + uid + "/" + currentDate;
 
-      // Cek apakah sudah ada data attendance hari ini
       if (Firebase.RTDB.getString(&fbdo_check, attendancePath + "/checkIn/time")) {
-        // Sudah ada check-in, cek apakah sudah check-out
+        // Sudah check-in, cek apakah bisa check-out
         if (!Firebase.RTDB.getString(&fbdo_check, attendancePath + "/checkOut/time")) {
-          // Belum check-out, lakukan check-out
-          String checkOutType = determineCheckOutType(hour, minute);
-          bool isValid = checkOutType == "null" || checkOutType == "early";
+          String checkInTime = fbdo_check.stringData();
+          
+          if (canCheckOut(checkInTime, hour, minute)) {
+            String checkOutType = determineCheckOutType(hour, minute);
+            bool isValid = checkOutType == "null" || checkOutType == "early";
 
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/time", currentTime);
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/photoUrl", "https://example.com/photo.jpg");
-          Firebase.RTDB.setBool(&fbdo, attendancePath + "/checkOut/isValid", isValid);
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/type", checkOutType);
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/name", name);
+            Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/time", currentTime);
+            Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/photoUrl", "https://example.com/photo.jpg");
+            Firebase.RTDB.setBool(&fbdo, attendancePath + "/checkOut/isValid", isValid);
+            Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/type", checkOutType);
+            Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/name", name);
 
-          Serial.println("Check-out: " + name + " (" + checkOutType + ")");
+            Serial.println("Check-out: " + name + " (Type: " + checkOutType + ", Valid: " + String(isValid) + ")");
+          } else {
+            Serial.println("Belum bisa check-out: Minimal waktu kerja belum tercapai");
+          }
         } else {
           Serial.println("Sudah melakukan check-out hari ini");
         }
       } else {
-        // Belum ada check-in
-        bool isCheckOutTime = hour >= workingHours.checkOutStart_hour;
-        String checkInType = isCheckOutTime ? "late" : determineCheckInType(hour, minute);
+        // Belum check-in
+        String checkInType = determineCheckInType(hour, minute);
         bool isValid = checkInType == "null" || checkInType == "late";
 
         Firebase.RTDB.setString(&fbdo, attendancePath + "/checkIn/time", currentTime);
@@ -215,21 +280,7 @@ void loop() {
         Firebase.RTDB.setString(&fbdo, attendancePath + "/checkIn/type", checkInType);
         Firebase.RTDB.setString(&fbdo, attendancePath + "/checkIn/name", name);
 
-        // Jika tap di waktu check-out tanpa check-in sebelumnya
-        if (isCheckOutTime) {
-          String checkOutType = determineCheckOutType(hour, minute);
-          bool isValidCheckOut = checkOutType == "null" || checkOutType == "early";
-
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/time", currentTime);
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/photoUrl", "https://example.com/photo.jpg");
-          Firebase.RTDB.setBool(&fbdo, attendancePath + "/checkOut/isValid", isValidCheckOut);
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/type", checkOutType);
-          Firebase.RTDB.setString(&fbdo, attendancePath + "/checkOut/name", name);
-
-          Serial.println("Auto check-in dan check-out: " + name);
-        } else {
-          Serial.println("Check-in: " + name + " (" + checkInType + ")");
-        }
+        Serial.println("Check-in: " + name + " (Type: " + checkInType + ", Valid: " + String(isValid) + ")");
       }
     } else {
       Firebase.RTDB.setString(&fbdo, String(FIREBASE_PATH_UNREGISTERED) + "/" + uid, uid);

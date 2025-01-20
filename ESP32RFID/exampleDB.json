@@ -1,64 +1,87 @@
 {
   "attendance": {
-    "B37C20AD": {
+    "EXAMPLE_UID_01": {
       "2025-01-19": {
         "checkIn": {
           "isValid": true,
-          "name": "Evee",
+          "name": "Example Name",
           "photoUrl": "https://example.com/photo.jpg",
-          "time": "14:51",
+          "time": "EXAMPLE_TIME",
           "type": "late"
         },
         "checkOut": {
           "isValid": true,
-          "name": "Evee",
+          "name": "Example Name",
           "photoUrl": "https://example.com/photo.jpg",
-          "time": "14:51",
+          "time": "EXAMPLE_TIME",
           "type": "null"
+        }
+      },
+      "2025-01-20": {
+        "checkIn": {
+          "isValid": false,
+          "name": "Example Name",
+          "photoUrl": "https://example.com/photo.jpg",
+          "time": "EXAMPLE_TIME",
+          "type": "invalid_time"
+        },
+        "checkOut": {
+          "isValid": false,
+          "name": "Example Name",
+          "photoUrl": "https://example.com/photo.jpg",
+          "time": "EXAMPLE_TIME",
+          "type": "invalid_time"
         }
       }
     },
-    "uid1": {
-      "1705555200000": {
+    "EXAMPLE_UID_02": {
+      "EXAMPLE_TIMESTAMP": {
         "checkIn": {
           "isValid": true,
-          "name": "John Doe",
+          "name": "Example Name",
           "photoUrl": "https://example.com/photo1.jpg",
-          "time": "08:00"
+          "time": "EXAMPLE_TIME"
         },
         "checkOut": {
           "isValid": true,
-          "name": "John Doe",
+          "name": "Example Name",
           "photoUrl": "https://example.com/photo2.jpg",
-          "time": "14:30"
+          "time": "EXAMPLE_TIME"
         }
       }
     }
   },
   "employees": {
-    "B37C20AD": {
-      "createAt": "timestamp",
-      "name": "Evee",
+    "EXAMPLE_UID_01": {
+      "createAt": "EXAMPLE_TIMESTAMP",
+      "name": "Example Name",
       "status": "Active"
     },
-    "uid1": {
-      "createAt": "timestamp",
-      "name": "John Doe",
+    "EXAMPLE_UID_02": {
+      "createAt": "EXAMPLE_TIMESTAMP",
+      "name": "Example Name",
       "status": "Active"
     }
   },
-  "unregisteredUids": {
-    "73AF4AA4": "73AF4AA4",
-    "B37C20AD": "B37C20AD"
-  },
+  "unregisteredUids": [
+    "EXAMPLE_UID_03",
+    "EXAMPLE_UID_01"
+  ],
   "workingHours": {
     "checkIn": {
-      "end": "09:30",
-      "start": "08:00"
+      "start": "EXAMPLE_TIME",
+      "end": "EXAMPLE_TIME"
     },
     "checkOut": {
-      "end": "15:00",
-      "start": "14:00"
-    }
+      "start": "EXAMPLE_TIME",
+      "end": "EXAMPLE_TIME"
+    },
+    "tolerances": {
+      "beforeCheckIn": 0,
+      "afterCheckIn": 120,
+      "beforeCheckOut": 120,
+      "afterCheckOut": 120
+    },
+    "minWorkingTime": 120
   }
 }
