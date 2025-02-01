@@ -63,17 +63,26 @@ struct RandomFileData {
 
 RandomFileData generateRandomFilename() {
     const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    const int lengthOfRandomString = 16;
+    const int lengthOfRandomString = 8; // Panjang string acak
     String randomString = "";
-    
+
+    // Generate random string
     for (int i = 0; i < lengthOfRandomString; i++) {
         int randomIndex = random(0, strlen(charset));
         randomString += charset[randomIndex];
     }
-    
+
+    // Get current epoch time in GMT+8
+    time_t now;
+    time(&now); // Get current time in seconds since epoch (UTC)
+    now += 8 * 3600; // Adjust to GMT+8 (8 hours * 3600 seconds per hour)
+    String epochTime = String(now); // Convert epoch time to string
+
+    // Combine random string and epoch time
     RandomFileData result;
-    result.randomPart = randomString;
-    result.fullUrl = "https://example.com/" + randomString + ".jpg";
+    result.randomPart = randomString + "_" + epochTime; // Gabungkan string acak dan epoch time
+    result.fullUrl = result.randomPart + ".jpg"; // Buat URL lengkap
+
     return result;
 }
 
@@ -275,7 +284,7 @@ String determineCheckOutType(int hour, int minute) {
 
 void setup() {
   Serial.begin(115200);
-  SerialMaster.begin(115200, SERIAL_8N1, SERIAL_RX_PIN, SERIAL_TX_PIN);
+  SerialMaster.begin(115200, SERIAL_8N1, SERIAL_TX_PIN, SERIAL_RX_PIN);
   
   // Initialize random seed using analog noise
   randomSeed(analogRead(0));
@@ -303,7 +312,7 @@ void setup() {
   displayLCD("Connecting to", "WiFi...");
   
   while (WiFi.status() != WL_CONNECTED) {
-    Serial.print("connected.");
+    Serial.print(".");
     delay(300);
   }
   
@@ -472,4 +481,3 @@ void loop() {
     delay(2000);
     displayLCD("Ready for", "Attendance");
 }
-
