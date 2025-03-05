@@ -14,6 +14,9 @@
 
 #include "firebase_config.h"
 
+// Define flash LED pin - typically GPIO 4 on ESP32-CAM
+#define FLASH_LED_PIN 4
+
 bool photoReady = true;
 
 HardwareSerial serial2(1); // RX pin: SERIAL2_RX_PIN, TX pin: SERIAL2_TX_PIN
@@ -89,6 +92,16 @@ void initCamera() {
 }
 
 void capturePhotoSaveLittleFS( void ) {
+  // Initialize flash LED as output
+  pinMode(FLASH_LED_PIN, OUTPUT);
+  
+  // Turn on flash LED
+  digitalWrite(FLASH_LED_PIN, HIGH);
+  Serial.println("Flash LED turned ON");
+  
+  // Short delay to let flash stabilize
+  delay(100);
+  
   // Dispose first pictures because of bad quality
   camera_fb_t* fb = NULL;
   // Skip first 3 frames (increase/decrease number as needed).
@@ -97,14 +110,21 @@ void capturePhotoSaveLittleFS( void ) {
     esp_camera_fb_return(fb);
     fb = NULL;
   }
+  
   // Take a new photo
   fb = NULL;  
   fb = esp_camera_fb_get();  
+  
+  // Turn off flash LED after capture
+  digitalWrite(FLASH_LED_PIN, LOW);
+  Serial.println("Flash LED turned OFF");
+  
   if(!fb) {
     Serial.println("Camera capture failed");
     delay(1000);
     ESP.restart();
   }
+  
   // Photo file name
   Serial.printf("Picture file name: %s\n", FILE_PHOTO_PATH);
   File file = LittleFS.open(FILE_PHOTO_PATH, FILE_WRITE);
@@ -138,6 +158,11 @@ void fcsUploadCallback(FCS_UploadStatusInfo info) {
 void setup() {
   Serial.begin(115200);
   serial2.begin(SERIAL2_BAUD_RATE,SERIAL_8N1, SERIAL2_RX_PIN, SERIAL2_TX_PIN);
+  
+  // Initialize flash LED pin as output
+  pinMode(FLASH_LED_PIN, OUTPUT);
+  digitalWrite(FLASH_LED_PIN, LOW); // Ensure flash is off at startup
+  
   initWiFi();
   initLittleFS();
   initCamera();
@@ -167,7 +192,7 @@ void loop() {
     Serial.println(receivedData);
   
 
-  // Parse JSON
+    // Parse JSON
     StaticJsonDocument<200> jsonDoc; // Ukuran buffer dapat disesuaikan
     DeserializationError error = deserializeJson(jsonDoc, receivedData);
 
@@ -188,7 +213,7 @@ void loop() {
     }
   String filePath = "/" + fileName + ".jpg";
   // Capture dan simpan foto jika photoReady
-  if (photoReady ) {
+  if (photoReady) {
     capturePhotoSaveLittleFS();
     photoReady = false;
   }
