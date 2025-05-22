@@ -17,6 +17,11 @@
 // Define flash LED pin - typically GPIO 4 on ESP32-CAM
 #define FLASH_LED_PIN 4
 
+// WiFi reconnection parameters
+#define WIFI_RECONNECT_INTERVAL 10000  // Attempt reconnection every 10 seconds
+unsigned long previousWifiCheck = 0;
+bool wifiConnected = false;
+
 bool photoReady = true;
 
 HardwareSerial serial2(1); // RX pin: SERIAL2_RX_PIN, TX pin: SERIAL2_TX_PIN
@@ -30,6 +35,7 @@ FirebaseConfig configF;
 
 // Function prototypes
 void fcsUploadCallback(FCS_UploadStatusInfo info);
+bool checkWiFiConnection();
 
 void initWiFi() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -39,6 +45,46 @@ void initWiFi() {
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("WiFi connected");
+}
+
+bool checkWiFiConnection() {
+  unsigned long currentMillis = millis();
+  
+  // Check WiFi connection status at regular intervals
+  if (currentMillis - previousWifiCheck >= WIFI_RECONNECT_INTERVAL || !wifiConnected) {
+    previousWifiCheck = currentMillis;
+    
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("WiFi connection lost. Reconnecting...");
+      WiFi.disconnect();
+      delay(1000);
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      
+      // Wait up to 10 seconds for reconnection
+      unsigned long reconnectStartTime = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - reconnectStartTime < 10000) {
+        delay(500);
+        Serial.print(".");
+      }
+      
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWiFi reconnected!");
+        Serial.print("IP Address: ");
+        Serial.println(WiFi.localIP());
+        wifiConnected = true;
+        return true;
+      } else {
+        Serial.println("\nFailed to reconnect to WiFi");
+        wifiConnected = false;
+        return false;
+      }
+    } else {
+      wifiConnected = true;
+      return true;
+    }
+  }
+  
+  return wifiConnected;
 }
 
 void initLittleFS() {
@@ -75,12 +121,13 @@ void initCamera() {
   config.grab_mode = CAMERA_GRAB_LATEST;
 
   if (psramFound()) {
-    config.frame_size = FRAMESIZE_UXGA;
-    config.jpeg_quality = 10;
-    config.fb_count = 1;
+    // Menggunakan resolusi yang lebih optimal untuk wajah
+    config.frame_size = FRAMESIZE_UXGA;  // 1024x768 - lebih baik untuk deteksi wajah
+    config.jpeg_quality = 0;  // Nilai lebih rendah = kualitas lebih tinggi (range: 0-63)
+    config.fb_count = 1;       // Mengurangi buffer count untuk membebaskan memori
   } else {
     config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 12;
+    config.jpeg_quality = 10;  // Meningkatkan kualitas JPEG
     config.fb_count = 1;
   }
 
@@ -89,26 +136,67 @@ void initCamera() {
     Serial.printf("Camera init failed with error 0x%x\n", err);
     ESP.restart();
   }
+  
+  // Optimize camera sensor settings for better focus
+  sensor_t * s = esp_camera_sensor_get();
+  if (s) {
+    // Tingkatkan ketajaman dan pengaturan kamera
+    s->set_brightness(s, 1);     // Sedikit lebih terang (-2 sampai 2)
+    s->set_contrast(s, 1);       // Tingkatkan kontras sedikit (-2 sampai 2)
+    s->set_saturation(s, 0);     // Saturation default (0)
+    s->set_sharpness(s, 2);      // Tingkatkan sharpness maksimal (0-3)
+    s->set_denoise(s, 1);        // Level denoise
+    s->set_quality(s, 10);       // Kualitas JPEG (0-63, nilai lebih rendah = kualitas lebih tinggi)
+    s->set_colorbar(s, 0);       // Matikan color bar test
+    s->set_whitebal(s, 1);       // Aktifkan white balance
+    s->set_gain_ctrl(s, 1);      // Aktifkan auto gain
+    s->set_exposure_ctrl(s, 1);  // Aktifkan auto exposure
+    s->set_hmirror(s, 0);        // 0 = disable mirroring
+    s->set_vflip(s, 0);          // 0 = disable flip vertikal
+    s->set_awb_gain(s, 1);       // Aktifkan Auto White Balance gain
+    s->set_wb_mode(s, 1);        // White Balance: Auto
+    
+    // Atur fokus dengan meningkatkan gain untuk kondisi cahaya berbeda
+    s->set_gainceiling(s, (gainceiling_t)GAINCEILING_8X); // Meningkatkan gain ceiling
+    
+    Serial.println("Camera sensor settings optimized for better focus");
+  }
 }
 
-void capturePhotoSaveLittleFS( void ) {
+void capturePhotoSaveLittleFS(void) {
   // Initialize flash LED as output
   pinMode(FLASH_LED_PIN, OUTPUT);
+  
+  // Pre-warm the sensor
+  sensor_t * s = esp_camera_sensor_get();
+  if (s) {
+    // Persiapan sensor sebelum mengambil foto
+    s->set_gain_ctrl(s, 1);      // Pastikan auto gain aktif
+    s->set_exposure_ctrl(s, 1);  // Pastikan auto exposure aktif
+  }
   
   // Turn on flash LED
   digitalWrite(FLASH_LED_PIN, HIGH);
   Serial.println("Flash LED turned ON");
   
-  // Short delay to let flash stabilize
-  delay(100);
+  // Berikan waktu tambahan untuk kamera melakukan stabilisasi
+  delay(500);  // Meningkatkan dari 300ms menjadi 500ms
   
   // Dispose first pictures because of bad quality
   camera_fb_t* fb = NULL;
-  // Skip first 3 frames (increase/decrease number as needed).
-  for (int i = 0; i < 4; i++) {
+  // Meningkatkan jumlah frame yang dibuang untuk stabilisasi sensor
+  for (int i = 0; i < 5; i++) {  // Meningkatkan dari 4 menjadi 5 frame
     fb = esp_camera_fb_get();
     esp_camera_fb_return(fb);
     fb = NULL;
+    delay(100);  // Tambahkan delay yang lebih besar antara frame untuk stabilisasi
+  }
+  
+  // Temporarily adjust settings for the final capture
+  if (s) {
+    // Optimal settings for face focus
+    s->set_aec2(s, 1);             // Enable auto exposure DSP
+    delay(200);                    // Allow settings to take effect
   }
   
   // Take a new photo
@@ -143,6 +231,11 @@ void capturePhotoSaveLittleFS( void ) {
   // Close the file
   file.close();
   esp_camera_fb_return(fb);
+  
+  // Reset any temporary settings
+  if (s) {
+    s->set_exposure_ctrl(s, 1);  // Restore auto exposure for next time
+  }
 }
 
 void fcsUploadCallback(FCS_UploadStatusInfo info) {
@@ -157,28 +250,46 @@ void fcsUploadCallback(FCS_UploadStatusInfo info) {
 
 void setup() {
   Serial.begin(115200);
-  serial2.begin(SERIAL2_BAUD_RATE,SERIAL_8N1, SERIAL2_RX_PIN, SERIAL2_TX_PIN);
+  serial2.begin(SERIAL2_BAUD_RATE, SERIAL_8N1, SERIAL2_RX_PIN, SERIAL2_TX_PIN);
   
   // Initialize flash LED pin as output
   pinMode(FLASH_LED_PIN, OUTPUT);
   digitalWrite(FLASH_LED_PIN, LOW); // Ensure flash is off at startup
   
+  // Disable brownout detector
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  
   initWiFi();
   initLittleFS();
   initCamera();
   
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
-
   // Firebase configuration
   configF.api_key = API_KEY;
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
   configF.token_status_callback = tokenStatusCallback;
-  Firebase.begin(&configF, &auth);
-  Firebase.reconnectWiFi(true);
+  
+  // Only initialize Firebase if WiFi is connected
+  if (wifiConnected) {
+    Firebase.begin(&configF, &auth);
+    Firebase.reconnectWiFi(true);
+  }
 }
 
 void loop() {
+  // Check and try to reconnect WiFi if necessary
+  if (!checkWiFiConnection()) {
+    // If WiFi connection failed, skip the rest of the loop
+    delay(1000);
+    return;
+  }
+  
+  // If Firebase is not initialized yet and WiFi is now connected, initialize it
+  if (wifiConnected && !Firebase.ready() && !Firebase.isTokenExpired()) {
+    Firebase.begin(&configF, &auth);
+    Firebase.reconnectWiFi(true);
+  }
+  
   String receivedData;
   String fileName;
   String url;
@@ -191,7 +302,6 @@ void loop() {
     Serial.print("Received data: ");
     Serial.println(receivedData);
   
-
     // Parse JSON
     StaticJsonDocument<200> jsonDoc; // Ukuran buffer dapat disesuaikan
     DeserializationError error = deserializeJson(jsonDoc, receivedData);
@@ -211,25 +321,29 @@ void loop() {
       Serial.println("JSON does not contain 'fileName' key");
       return; // Keluar jika key "fileName" tidak ditemukan
     }
-  String filePath = "/" + fileName + ".jpg";
-  // Capture dan simpan foto jika photoReady
-  if (photoReady) {
-    capturePhotoSaveLittleFS();
-    photoReady = false;
-  }
+    
+    String filePath = "/" + fileName + ".jpg";
+    // Capture dan simpan foto jika photoReady
+    if (photoReady) {
+      capturePhotoSaveLittleFS();
+      photoReady = false;
+    }
 
-  delay(1000); // Tunggu sebentar sebelum upload ke Firebase
+    delay(1000); // Tunggu sebentar sebelum upload ke Firebase
 
-  // Upload ke Firebase jika siap
-  if (Firebase.ready() && !taskCompleted) {
-    taskCompleted = true;
-    if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, FILE_PHOTO_PATH, mem_storage_type_flash, filePath, "image/jpeg", fcsUploadCallback)) {
-      Serial.printf("\nDownload URL: %s\n", fbdo.downloadURL().c_str());
-      url = fbdo.downloadURL().c_str();
-    } else {
-      Serial.printf("Upload failed: %s\n", fbdo.errorReason().c_str());
+    // Upload ke Firebase jika siap dan WiFi terhubung
+    if (wifiConnected && Firebase.ready() && !taskCompleted) {
+      taskCompleted = true;
+      if (Firebase.Storage.upload(&fbdo, STORAGE_BUCKET_ID, FILE_PHOTO_PATH, mem_storage_type_flash, filePath, "image/jpeg", fcsUploadCallback)) {
+        Serial.printf("\nDownload URL: %s\n", fbdo.downloadURL().c_str());
+        url = fbdo.downloadURL().c_str();
+      } else {
+        Serial.printf("Upload failed: %s\n", fbdo.errorReason().c_str());
+      }
+    } else if (!wifiConnected) {
+      Serial.println("Cannot upload to Firebase: WiFi disconnected");
     }
   }
-}
+  
   delay(1000);  // Small delay before next loop iteration
 }
